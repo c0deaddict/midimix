@@ -1,0 +1,89 @@
+nats:
+  url: nats://127.0.0.1:4222
+  username: midimix
+  passwordFile: /run/secrets/nats/password
+
+midi:
+  input: MIDI Mix MIDI 1
+  output: MIDI Mix MIDI 1
+  channel: 0
+  maxInputValue: 127
+
+pulseaudio:
+  targets:
+    - type: PlaybackStream
+      name: spotify
+      mute: 1
+      presence: 3
+      volume: 19
+
+    - type: PlaybackStream
+      name: Firefox
+      mute: 4
+      presence: 6
+      volume: 23
+
+    - type: PlaybackStream
+      name: Chromium
+      mute: 7
+      presence: 9
+      volume: 27
+
+    - type: Sink
+      name: Focusrite Scarlett 2i2 2nd Gen Analog Stereo
+      mute: 10
+      presence: 12
+      volume: 31
+
+    - type: Source
+      name: Webcam C270 Mono
+      mute: 13
+      presence: 15
+      volume: 49
+
+    - type: Source
+      name: Jabra Link 380 Mono
+      mute: 16
+      presence: 18
+      volume: 53
+
+actions:
+  - type: LedHSV
+    config:
+      host: sitting-desk
+      controls:
+        h: 16
+        s: 17
+        v: 18
+
+  - type: LedHSV
+    config:
+      target: standing-desk
+      controls:
+        h: 20
+        s: 21
+        v: 22
+
+  - type: LedHSV
+    config:
+      target: deskled
+      controls:
+        h: 24
+        s: 25
+        v: 26
+
+  - type: LedHSV
+    config:
+      target: ceiling-led
+      controls:
+        h: 28
+        s: 29
+        v: 30
+
+  - type: LedHSV
+    config:
+      target: ledtable
+      controls:
+        h: 46
+        s: 47
+        v: 48
