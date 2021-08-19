@@ -2,14 +2,17 @@ package main
 
 import (
 	"flag"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/c0deaddict/midimix/internal/config"
 	"github.com/c0deaddict/midimix/internal/midiclient"
-	"gitlab.com/gomidi/midi"
+	"github.com/c0deaddict/midimix/internal/paclient"
 )
 
 var configFile = flag.String("config", "$HOME/.config/midimix/config.yaml", "Config file")
@@ -17,21 +20,28 @@ var configFile = flag.String("config", "$HOME/.config/midimix/config.yaml", "Con
 func main() {
 	flag.Parse()
 
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+
 	cfg, err := config.Read(os.ExpandEnv(*configFile))
 	if err != nil {
-		log.Fatalln("Failed to read config:", err)
+		log.Fatal().Err(err).Msg("failed to read config")
 	}
 
 	mc, err := midiclient.Open(cfg.Midi)
 	if err != nil {
-		log.Fatalln("Midi:", err)
+		log.Fatal().Err(err).Msg("midi error")
 	}
 	defer mc.Close()
-	defer log.Println("test")
 
-	ch := make(chan midi.Message)
+	pa, err := paclient.Open(cfg.PulseAudio, mc)
+	if err != nil {
+		log.Fatal().Err(err).Msg("pulseaudio error")
+	}
+	defer pa.Close()
+
+	ch := make(chan midiclient.MidiMessage)
 	if err := mc.Listen(ch); err != nil {
-		log.Fatalln("Midi:", err)
+		log.Fatal().Err(err).Msg("midi error")
 	}
 
 	// nc, err := natsclient.Connect(cfg.Nats)
@@ -42,9 +52,13 @@ func main() {
 
 	go func() {
 		for msg := range ch {
-			log.Println(msg)
+			log.Info().Msgf("%v", msg)
+			// TODO: emit all on nats
+			pa.OnMidiMessage(msg)
 		}
 	}()
+
+	go pa.Listen()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)

@@ -15,15 +15,29 @@ type NatsConfig struct {
 type MidiConfig struct {
 	Input         string `yaml:"input"`
 	Output        string `yaml:"output"`
-	Channel       uint   `yaml:"channel"`
+	Channel       uint8  `yaml:"channel"`
 	MaxInputValue uint   `yaml:"maxInputValue"`
 }
 
-type PulseaudioConfig struct {
-	Targets map[string]struct {
-		Type string `yaml:"type"`
-		Name string `yaml:"name"`
-	} `yaml:"targets"`
+type PulseAudioTargetType string
+
+const (
+	PlaybackStream PulseAudioTargetType = "PlaybackStream"
+	RecordStream                        = "RecordStream"
+	Sink                                = "Sink"
+	Source                              = "Source"
+)
+
+type PulseAudioTarget struct {
+	Type     PulseAudioTargetType `yaml:"type"`
+	Name     string               `yaml:"name"`
+	Mute     *uint8               `yaml:"mute",omitempty`
+	Presence *uint8               `yaml:"presence",omitempty`
+	Volume   *uint8               `yaml:"volume",omitempty`
+}
+
+type PulseAudioConfig struct {
+	Targets []PulseAudioTarget `yaml:"targets"`
 }
 
 type Action struct {
@@ -34,8 +48,8 @@ type Action struct {
 type Config struct {
 	Nats       NatsConfig       `yaml:"nats"`
 	Midi       MidiConfig       `yaml:"midi"`
-	Pulseaudio PulseaudioConfig `yaml:"pulseaudio"`
-	Action     []Action         `yaml:"actions"`
+	PulseAudio PulseAudioConfig `yaml:"pulseaudio"`
+	Actions    []Action         `yaml:"actions"`
 }
 
 func Read(filename string) (*Config, error) {

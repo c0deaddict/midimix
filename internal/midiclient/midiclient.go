@@ -6,6 +6,7 @@ import (
 
 	"github.com/c0deaddict/midimix/internal/config"
 	"gitlab.com/gomidi/midi"
+	"gitlab.com/gomidi/midi/midimessage/channel"
 	"gitlab.com/gomidi/midi/reader"
 	"gitlab.com/gomidi/midi/writer"
 	"gitlab.com/gomidi/portmididrv"
@@ -16,6 +17,23 @@ type MidiClient struct {
 	in  midi.In
 	out midi.Out
 	wr  *writer.Writer
+	cfg *config.MidiConfig
+}
+
+type MidiMessage interface{}
+
+type MidiNoteOn struct {
+	Key      uint8
+	Velocity float32
+}
+
+type MidiNoteOff struct {
+	Key uint8
+}
+
+type MidiControlChange struct {
+	Key   uint8
+	Value float32
 }
 
 func Open(cfg config.MidiConfig) (*MidiClient, error) {
@@ -76,7 +94,7 @@ func Open(cfg config.MidiConfig) (*MidiClient, error) {
 
 	wr := writer.New(out)
 
-	return &MidiClient{drv, in, out, wr}, nil
+	return &MidiClient{drv, in, out, wr, &cfg}, nil
 }
 
 func (m *MidiClient) Close() {
@@ -86,13 +104,54 @@ func (m *MidiClient) Close() {
 	log.Println("Midi: closed")
 }
 
-func (m *MidiClient) Listen(ch chan midi.Message) error {
+func (m *MidiClient) Listen(ch chan MidiMessage) error {
 	rd := reader.New(
 		reader.NoLogger(),
+		reader.IgnoreMIDIClock(),
 		reader.Each(func(pos *reader.Position, msg midi.Message) {
-			ch <- msg
+			switch msg := msg.(type) {
+			case channel.NoteOn:
+				if msg.Channel() == m.cfg.Channel {
+					ch <- MidiNoteOn{
+						msg.Key(),
+						float32(msg.Velocity()) / float32(m.cfg.MaxInputValue),
+					}
+				}
+
+			case channel.NoteOff:
+				if msg.Channel() == m.cfg.Channel {
+					ch <- MidiNoteOff{msg.Key()}
+				}
+
+			case channel.ControlChange:
+				if msg.Channel() == m.cfg.Channel {
+					ch <- MidiControlChange{
+						msg.Controller(),
+						float32(msg.Value()) / float32(m.cfg.MaxInputValue),
+					}
+				}
+			}
 		}),
 	)
 
 	return rd.ListenTo(m.in)
+}
+
+func (m *MidiClient) LedOn(key uint8) {
+	writer.NoteOn(m.wr, key, 127)
+}
+
+func (m *MidiClient) LedOff(key uint8) {
+	// Strange.. writer.NoteOff(..) doesn't work.
+	writer.NoteOn(m.wr, key, 127)
+	writer.NoteOff(m.wr, key)
+	// m.wr.Write(writer.Channel(m.wr).NoteOff(key))
+}
+
+func (m *MidiClient) SetLed(key uint8, state bool) {
+	if state {
+		m.LedOn(key)
+	} else {
+		m.LedOff(key)
+	}
 }
