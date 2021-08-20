@@ -1,13 +1,20 @@
 package ledcolor
 
 import (
-	"github.com/c0deaddict/midimix/internal/midiclient"
+	"fmt"
+
+	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mitchellh/mapstructure"
+	"github.com/nats-io/nats.go"
+	"github.com/rs/zerolog/log"
+
+	"github.com/c0deaddict/midimix/internal/action"
+	"github.com/c0deaddict/midimix/internal/midiclient"
 )
 
 const (
-	FORMAT_RGB = "rgb"
-	FORMAT_HSV = "hsv"
+	FormatRGB = "rgb"
+	FormatHSV = "hsv"
 )
 
 type Config struct {
@@ -18,15 +25,21 @@ type Config struct {
 
 type LedColor struct {
 	cfg   Config
-	state [3]uint8
+	state [3]float32
+	nc    *nats.Conn
 }
 
-func New(config map[string]interface{}) (*LedColor, error) {
+func New(config map[string]interface{}, nc *nats.Conn) (action.Action, error) {
 	led := LedColor{}
 	if err := mapstructure.Decode(config, &led.cfg); err != nil {
 		return nil, err
 	}
+	led.nc = nc
 	return &led, nil
+}
+
+func (l *LedColor) String() string {
+	return fmt.Sprintf("LedColor host=%s", l.cfg.Host)
 }
 
 func (l *LedColor) OnMidiMessage(msg midiclient.MidiMessage) {
@@ -35,13 +48,37 @@ func (l *LedColor) OnMidiMessage(msg midiclient.MidiMessage) {
 		update := false
 		for i, key := range l.cfg.Controls {
 			if key == msg.Key {
-				l.state[i] = uint8(255 * msg.Value)
+				l.state[i] = msg.Value
 				update = true
 			}
 		}
 
 		if update {
-			// TODO update leds
+			if err := l.updateColor(); err != nil {
+				log.Warn().Err(err).Msg("nats update color failed")
+			}
 		}
 	}
+}
+
+func (l *LedColor) color() string {
+	switch l.cfg.Format {
+	case FormatHSV:
+		h := float64(360.0 * l.state[0])
+		s := float64(l.state[1])
+		v := float64(l.state[2])
+		return colorful.Hsv(h, s, v).Hex()[1:]
+
+	// case FormatRGB:
+	default:
+		r := uint8(255 * l.state[0])
+		g := uint8(255 * l.state[1])
+		b := uint8(255 * l.state[2])
+		return fmt.Sprintf("%02x%02x%02x", r, g, b)
+	}
+}
+
+func (l *LedColor) updateColor() error {
+	subject := fmt.Sprintf("leds.color.%s", l.cfg.Host)
+	return l.nc.Publish(subject, []byte(l.color()))
 }

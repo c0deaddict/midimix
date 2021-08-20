@@ -48,42 +48,32 @@ pulseaudio:
       volume: 53
 
 actions:
-  - type: LedHSV
+  - type: LedColor
     config:
       host: sitting-desk
-      controls:
-        h: 16
-        s: 17
-        v: 18
+      controls: [16, 17, 18]
+      format: hsv
 
-  - type: LedHSV
+  - type: LedColor
     config:
-      target: standing-desk
-      controls:
-        h: 20
-        s: 21
-        v: 22
+      host: standing-desk
+      controls: [20, 21, 22]
+      format: hsv
 
-  - type: LedHSV
+  - type: LedColor
     config:
-      target: deskled
-      controls:
-        h: 24
-        s: 25
-        v: 26
+      host: deskled
+      controls: [24, 25, 26]
+      format: hsv
 
-  - type: LedHSV
+  - type: LedColor
     config:
-      target: ceiling-led
-      controls:
-        h: 28
-        s: 29
-        v: 30
+      host: ceiling-led
+      controls: [28, 29, 30]
+      format: hsv
 
-  - type: LedHSV
+  - type: LedColor
     config:
-      target: ledtable
-      controls:
-        h: 46
-        s: 47
-        v: 48
+      host: ledtable
+      controls: [46, 47, 48]
+      format: hsv

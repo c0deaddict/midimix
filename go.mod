@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/godbus/dbus v4.1.0+incompatible
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/nats-io/nats-server/v2 v2.3.4 // indirect
 	github.com/nats-io/nats.go v1.11.1-0.20210623165838-4b75fc59ae30
