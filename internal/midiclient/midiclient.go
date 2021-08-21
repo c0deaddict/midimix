@@ -2,9 +2,9 @@ package midiclient
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/c0deaddict/midimix/internal/config"
+	"github.com/rs/zerolog/log"
 	"gitlab.com/gomidi/midi"
 	"gitlab.com/gomidi/midi/midimessage/channel"
 	"gitlab.com/gomidi/midi/reader"
@@ -58,7 +58,7 @@ func Open(cfg config.MidiConfig) (*MidiClient, error) {
 	var out midi.Out
 
 	for _, port := range ins {
-		log.Printf("Found input midi device: %s", port.String())
+		log.Info().Msgf("found midi input device: %s", port.String())
 		if port.String() == cfg.Input {
 			in = port
 			break
@@ -66,7 +66,7 @@ func Open(cfg config.MidiConfig) (*MidiClient, error) {
 	}
 
 	for _, port := range outs {
-		log.Printf("Found output midi device: %s", port.String())
+		log.Info().Msgf("found midi output device: %s", port.String())
 		if port.String() == cfg.Output {
 			out = port
 			break
@@ -101,7 +101,7 @@ func (m *MidiClient) Close() {
 	m.in.Close()
 	m.out.Close()
 	m.drv.Close()
-	log.Println("Midi: closed")
+	log.Info().Msg("midi closed")
 }
 
 func (m *MidiClient) Listen(ch chan MidiMessage) error {
@@ -142,10 +142,9 @@ func (m *MidiClient) LedOn(key uint8) {
 }
 
 func (m *MidiClient) LedOff(key uint8) {
-	// Strange.. writer.NoteOff(..) doesn't work.
+	// NOTE: without the NoteOn the LED doesn't go off most of the time..?
 	writer.NoteOn(m.wr, key, 127)
 	writer.NoteOff(m.wr, key)
-	// m.wr.Write(writer.Channel(m.wr).NoteOff(key))
 }
 
 func (m *MidiClient) SetLed(key uint8, state bool) {

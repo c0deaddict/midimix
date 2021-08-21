@@ -2,12 +2,12 @@ package natsclient
 
 import (
 	"bufio"
-	"log"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/rs/zerolog/log"
 
 	"github.com/c0deaddict/midimix/internal/config"
 )
@@ -24,13 +24,13 @@ func Connect(cfg config.NatsConfig) (*nats.Conn, error) {
 
 	opts = append(opts, nats.ReconnectWait(2*time.Second))
 	opts = append(opts, nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
-		log.Printf("Nats got disconnected from %v. Reason: %q\n", nc.ConnectedUrl(), err)
+		log.Info().Err(err).Msgf("nats got disconnected from %v", nc.ConnectedUrl())
 	}))
 	opts = append(opts, nats.ReconnectHandler(func(nc *nats.Conn) {
-		log.Printf("Nats got reconnected to %v\n", nc.ConnectedUrl())
+		log.Info().Msgf("nats got reconnected to %v", nc.ConnectedUrl())
 	}))
 	opts = append(opts, nats.ClosedHandler(func(nc *nats.Conn) {
-		log.Printf("Nats connection closed. Reason: %q\n", nc.LastError())
+		log.Info().Err(nc.LastError()).Msg("nats connection closed")
 	}))
 
 	nc, err := nats.Connect(cfg.Url, opts...)
@@ -48,7 +48,7 @@ func readPassword(passwordFile string) (*string, error) {
 	}
 
 	if info.Mode()&0o077 != 0 {
-		log.Printf("Warning: permissions are too open on %v\n", passwordFile)
+		log.Warn().Msgf("permissions are too open on %s", passwordFile)
 	}
 
 	if password, err := readFirstLine(passwordFile); err != nil {

@@ -5,7 +5,6 @@ import (
 
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mitchellh/mapstructure"
-	"github.com/nats-io/nats.go"
 	"github.com/rs/zerolog/log"
 
 	"github.com/c0deaddict/midimix/internal/action"
@@ -24,17 +23,17 @@ type Config struct {
 }
 
 type LedColor struct {
+	*action.Clients
 	cfg   Config
 	state [3]float32
-	nc    *nats.Conn
 }
 
-func New(config map[string]interface{}, nc *nats.Conn) (action.Action, error) {
+func New(clients *action.Clients, config map[string]interface{}) (action.Action, error) {
 	led := LedColor{}
+	led.Clients = clients
 	if err := mapstructure.Decode(config, &led.cfg); err != nil {
 		return nil, err
 	}
-	led.nc = nc
 	return &led, nil
 }
 
@@ -80,5 +79,5 @@ func (l *LedColor) color() string {
 
 func (l *LedColor) updateColor() error {
 	subject := fmt.Sprintf("leds.color.%s", l.cfg.Host)
-	return l.nc.Publish(subject, []byte(l.color()))
+	return l.Nats.Publish(subject, []byte(l.color()))
 }
