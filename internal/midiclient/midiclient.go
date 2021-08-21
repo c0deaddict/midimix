@@ -154,3 +154,7 @@ func (m *MidiClient) SetLed(key uint8, state bool) {
 		m.LedOff(key)
 	}
 }
+
+// TODO emulate Send all button:
+// Request Existing Configuration (0x66)
+// https://docs.google.com/document/d/1zeRPklp_Mo_XzJZUKu2i-p1VgfBoUWF0JKZ5CzX8aB0/edit#

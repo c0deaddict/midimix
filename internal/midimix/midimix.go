@@ -6,8 +6,10 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/c0deaddict/midimix/internal/action"
+	"github.com/c0deaddict/midimix/internal/action/ledanimation"
 	"github.com/c0deaddict/midimix/internal/action/ledcolor"
 	"github.com/c0deaddict/midimix/internal/action/ledmode"
+	"github.com/c0deaddict/midimix/internal/action/ledsetting"
 	"github.com/c0deaddict/midimix/internal/action/testled"
 	"github.com/c0deaddict/midimix/internal/config"
 	"github.com/c0deaddict/midimix/internal/midiclient"
@@ -16,9 +18,11 @@ import (
 )
 
 var actions = map[string]action.NewAction{
-	"LedColor": ledcolor.New,
-	"LedMode":  ledmode.New,
-	"TestLed":  testled.New,
+	"LedColor":     ledcolor.New,
+	"LedMode":      ledmode.New,
+	"LedAnimation": ledanimation.New,
+	"LedSetting":   ledsetting.New,
+	"TestLed":      testled.New,
 }
 
 type Midimix struct {

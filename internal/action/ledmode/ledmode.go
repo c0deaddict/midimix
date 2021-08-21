@@ -10,8 +10,8 @@ import (
 )
 
 type Config struct {
-	Key   uint8  `mapstructure:"key"`
-	Group string `mapstructure:"group"`
+	Key  uint8  `mapstructure:"key"`
+	Host string `mapstructure:"host"`
 }
 
 type LedMode struct {
@@ -30,7 +30,7 @@ func New(clients *action.Clients, config map[string]interface{}) (action.Action,
 }
 
 func (l *LedMode) String() string {
-	return fmt.Sprintf("LedMode group=%s", l.cfg.Group)
+	return fmt.Sprintf("LedMode host=%s", l.cfg.Host)
 }
 
 func (l *LedMode) OnMidiMessage(msg midiclient.MidiMessage) {
@@ -53,6 +53,6 @@ func (l *LedMode) mode() string {
 }
 
 func (l *LedMode) updateMode() error {
-	subject := fmt.Sprintf("leds.mode.%s", l.cfg.Group)
+	subject := fmt.Sprintf("leds.mode.%s", l.cfg.Host)
 	return l.Nats.Publish(subject, []byte(l.mode()))
 }
