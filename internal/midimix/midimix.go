@@ -7,6 +7,7 @@ import (
 
 	"github.com/c0deaddict/midimix/internal/action"
 	"github.com/c0deaddict/midimix/internal/action/ledcolor"
+	"github.com/c0deaddict/midimix/internal/action/ledmode"
 	"github.com/c0deaddict/midimix/internal/action/testled"
 	"github.com/c0deaddict/midimix/internal/config"
 	"github.com/c0deaddict/midimix/internal/midiclient"
@@ -16,6 +17,7 @@ import (
 
 var actions = map[string]action.NewAction{
 	"LedColor": ledcolor.New,
+	"LedMode":  ledmode.New,
 	"TestLed":  testled.New,
 }
 
