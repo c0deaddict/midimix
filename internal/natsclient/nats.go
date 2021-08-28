@@ -22,7 +22,10 @@ func Connect(cfg config.NatsConfig) (*nats.Conn, error) {
 		opts = append(opts, nats.UserInfo(cfg.Username, *password))
 	}
 
+	// Try to reconnect every 2 seconds, forever.
+	opts = append(opts, nats.MaxReconnects(-1))
 	opts = append(opts, nats.ReconnectWait(2*time.Second))
+
 	opts = append(opts, nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
 		log.Info().Err(err).Msgf("nats got disconnected from %v", nc.ConnectedUrl())
 	}))
