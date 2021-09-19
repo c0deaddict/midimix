@@ -53,6 +53,8 @@ func Open(cfg *config.Config) (*Midimix, error) {
 		return nil, fmt.Errorf("midi listen failed: %v", err)
 	}
 
+	m.Midi.RequestAll()
+
 	m.Pulse, err = paclient.Open(cfg.PulseAudio, m.Midi)
 	if err != nil {
 		m.Midi.Close()

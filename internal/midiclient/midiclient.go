@@ -7,6 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"gitlab.com/gomidi/midi"
 	"gitlab.com/gomidi/midi/midimessage/channel"
+	"gitlab.com/gomidi/midi/midimessage/sysex"
 	"gitlab.com/gomidi/midi/reader"
 	"gitlab.com/gomidi/midi/writer"
 	"gitlab.com/gomidi/rtmididrv"
@@ -130,6 +131,16 @@ func (m *MidiClient) Listen(ch chan MidiMessage) error {
 						float32(msg.Value()) / float32(m.cfg.MaxInputValue),
 					}
 				}
+
+			case sysex.SysEx:
+				cfg := &ConfigurationResponse{}
+				if err := cfg.ReadFrom(msg.Raw()); err != nil {
+					log.Error().Err(err).Msg("failed to parse configuration response message")
+				} else {
+					log.Info().Msgf("cfg response: %v", cfg)
+				}
+			default:
+				log.Debug().Msgf("unknown message: %v", msg)
 			}
 		}),
 	)
@@ -155,6 +166,99 @@ func (m *MidiClient) SetLed(key uint8, state bool) {
 	}
 }
 
-// TODO emulate Send all button:
+type RequestExistingConfiguration struct{}
+
+func (r RequestExistingConfiguration) String() string {
+	return "RequestExistingConfiguration"
+}
+
 // Request Existing Configuration (0x66)
-// https://docs.google.com/document/d/1zeRPklp_Mo_XzJZUKu2i-p1VgfBoUWF0JKZ5CzX8aB0/edit#
+// https://docs.google.com/document/d/1zeRPklp_Mo_XzJZUKu2i-p1VgfBoUWF0JKZ5CzX8aB0/view
+func (r RequestExistingConfiguration) Raw() []byte {
+	return []byte{0xF0, 0x47, 0x00, 0x31, 0x66, 0x00, 0x01, 0xF7}
+}
+
+func (m *MidiClient) RequestAll() error {
+	return m.wr.Write(RequestExistingConfiguration{})
+}
+
+type ConfigurationResponse struct {
+	Dials [24]struct {
+		Channel byte // 0-15 representing channel 1-16
+		Value   byte // 0-127
+	}
+	Sliders [9]struct {
+		Channel byte // 0-15 representing channel 1-16
+		Value   byte // 0-127
+	}
+	MuteButtons [8]struct {
+		Channel    byte // 0-15 representing channel 1-16
+		ButtonMode byte // 0 = note, 1 = CC (continuous control)
+		Value      byte
+	}
+	RecArmButtons [8]struct {
+		Channel    byte // 0-15 representing channel 1-16
+		ButtonMode byte // 0 = note, 1 = CC (continuous control)
+		Value      byte
+	}
+	MuteSoloButtons [8]struct {
+		Channel    byte // 0-15 representing channel 1-16
+		ButtonMode byte // 0 = note, 1 = CC (continuous control)
+		Value      byte
+	}
+}
+
+func (c *ConfigurationResponse) ReadFrom(msg []byte) error {
+	if msg[0] != 0xF0 {
+		return fmt.Errorf("not a SysEx message")
+	}
+
+	if len(msg) != 146 {
+		return fmt.Errorf("length must be 146 bytes")
+	}
+
+	if msg[1] != 0x47 || msg[3] != 0x31 {
+		return fmt.Errorf("manufacturer ID (%#x) and/or model ID (%#x) do not match", msg[1], msg[3])
+	}
+
+	if msg[4] != 0x67 {
+		return fmt.Errorf("not a configuration response message")
+	}
+
+	idx := 7
+
+	for i := 0; i < 24; i++ {
+		c.Dials[i].Channel = msg[idx]
+		c.Dials[i].Value = msg[idx+1]
+		idx += 2
+	}
+
+	for i := 0; i < 9; i++ {
+		c.Sliders[i].Channel = msg[idx]
+		c.Sliders[i].Value = msg[idx+1]
+		idx += 2
+	}
+
+	for i := 0; i < 8; i++ {
+		c.MuteButtons[i].Channel = msg[idx]
+		c.MuteButtons[i].ButtonMode = msg[idx+1]
+		c.MuteButtons[i].Value = msg[idx+2]
+		idx += 3
+	}
+
+	for i := 0; i < 8; i++ {
+		c.RecArmButtons[i].Channel = msg[idx]
+		c.RecArmButtons[i].ButtonMode = msg[idx+1]
+		c.RecArmButtons[i].Value = msg[idx+2]
+		idx += 3
+	}
+
+	for i := 0; i < 8; i++ {
+		c.MuteSoloButtons[i].Channel = msg[idx]
+		c.MuteSoloButtons[i].ButtonMode = msg[idx+1]
+		c.MuteSoloButtons[i].Value = msg[idx+2]
+		idx += 3
+	}
+
+	return nil
+}
