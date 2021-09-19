@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 	"time"
 
@@ -15,9 +16,19 @@ import (
 )
 
 var configFile = flag.String("config", "$HOME/.config/midimix/config.yaml", "Config file")
+var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 func main() {
 	flag.Parse()
+
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to start cpu profile")
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 
@@ -28,7 +39,7 @@ func main() {
 
 	midimix, err := midimix.Open(cfg)
 	if err != nil {
-		log.Fatal().Err(err)
+		log.Fatal().Err(err).Msg("failed to start midimix")
 	}
 	defer midimix.Close()
 

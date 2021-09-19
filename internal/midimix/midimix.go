@@ -50,7 +50,7 @@ func Open(cfg *config.Config) (*Midimix, error) {
 	if err := m.Midi.Listen(m.ch); err != nil {
 		m.Midi.Close()
 		m.Nats.Close()
-		log.Fatal().Err(err).Msg("midi listen failed")
+		return nil, fmt.Errorf("midi listen failed: %v", err)
 	}
 
 	m.Pulse, err = paclient.Open(cfg.PulseAudio, m.Midi)

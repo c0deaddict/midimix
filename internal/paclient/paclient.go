@@ -267,7 +267,7 @@ func (p *PulseAudioClient) StreamVolumeUpdated(path dbus.ObjectPath, values []ui
 	// https://bugzilla.mozilla.org/show_bug.cgi?id=1422637
 	if target, _ := p.findTargetByPath(path); target != nil {
 		if target.cfg.Type == config.PlaybackStream && target.cfg.Name == "Firefox" {
-			if values[0] == 65536 && values[1] == 65536 && target.volume < 1.0 {
+			if values[0] == 65536 && target.volume < 1.0 {
 				log.Debug().Msgf("fixing firefox volume for %v", path)
 				obj := p.getObject(target.cfg.Type, path)
 				if obj != nil {

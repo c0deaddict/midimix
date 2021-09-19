@@ -1,5 +1,5 @@
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.mkShell {
-  buildInputs = with pkgs; [ gcc portmidi ];
+  buildInputs = with pkgs; [ gcc alsaLib ];
 }

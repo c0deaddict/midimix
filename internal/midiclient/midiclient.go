@@ -9,7 +9,7 @@ import (
 	"gitlab.com/gomidi/midi/midimessage/channel"
 	"gitlab.com/gomidi/midi/reader"
 	"gitlab.com/gomidi/midi/writer"
-	"gitlab.com/gomidi/portmididrv"
+	"gitlab.com/gomidi/rtmididrv"
 )
 
 type MidiClient struct {
@@ -37,7 +37,7 @@ type MidiControlChange struct {
 }
 
 func Open(cfg config.MidiConfig) (*MidiClient, error) {
-	drv, err := portmididrv.New()
+	drv, err := rtmididrv.New()
 	if err != nil {
 		return nil, err
 	}
