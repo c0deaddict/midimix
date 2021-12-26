@@ -28,7 +28,7 @@ func main() {
 
 	midimix, err := midimix.Open(cfg)
 	if err != nil {
-		log.Fatal().Err(err)
+		log.Fatal().Err(err).Msg("startup failed")
 	}
 	defer midimix.Close()
 
