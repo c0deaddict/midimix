@@ -27,8 +27,9 @@ var actions = map[string]action.NewAction{
 
 type Midimix struct {
 	action.Clients
-	actions []action.Action
-	ch      chan midiclient.MidiMessage
+	actions    []action.Action
+	ch         chan midiclient.MidiMessage
+	stopListen func()
 }
 
 func Open(cfg *config.Config) (*Midimix, error) {
@@ -47,7 +48,8 @@ func Open(cfg *config.Config) (*Midimix, error) {
 	}
 
 	m.ch = make(chan midiclient.MidiMessage)
-	if err := m.Midi.Listen(m.ch); err != nil {
+	m.stopListen, err = m.Midi.Listen(m.ch)
+	if err != nil {
 		m.Midi.Close()
 		m.Nats.Close()
 		return nil, fmt.Errorf("midi listen failed: %v", err)
@@ -99,6 +101,9 @@ func (m *Midimix) Run() {
 func (m *Midimix) Close() {
 	if m.ch != nil {
 		close(m.ch)
+	}
+	if m.stopListen != nil {
+		m.stopListen()
 	}
 	if m.Pulse != nil {
 		m.Pulse.Close()

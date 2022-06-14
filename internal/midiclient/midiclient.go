@@ -5,18 +5,14 @@ import (
 
 	"github.com/c0deaddict/midimix/internal/config"
 	"github.com/rs/zerolog/log"
-	"gitlab.com/gomidi/midi"
-	"gitlab.com/gomidi/midi/midimessage/channel"
-	"gitlab.com/gomidi/midi/reader"
-	"gitlab.com/gomidi/midi/writer"
-	"gitlab.com/gomidi/rtmididrv"
+	"gitlab.com/gomidi/midi/v2"
+	"gitlab.com/gomidi/midi/v2/drivers"
+	_ "gitlab.com/gomidi/midi/v2/drivers/rtmididrv" // autoregisters driver
 )
 
 type MidiClient struct {
-	drv midi.Driver
-	in  midi.In
-	out midi.Out
-	wr  *writer.Writer
+	in  drivers.In
+	out drivers.Out
 	cfg *config.MidiConfig
 }
 
@@ -37,114 +33,72 @@ type MidiControlChange struct {
 }
 
 func Open(cfg config.MidiConfig) (*MidiClient, error) {
-	drv, err := rtmididrv.New()
+	in, err := midi.FindInPort(cfg.Input)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("input midi device %s not found: %v", cfg.Input, err)
 	}
+	log.Info().Msgf("found midi input device: %s", in.String())
 
-	ins, err := drv.Ins()
+	out, err := midi.FindOutPort(cfg.Output)
 	if err != nil {
-		drv.Close()
-		return nil, err
+		return nil, fmt.Errorf("output midi device %s not found: %v", cfg.Output, err)
 	}
-
-	outs, err := drv.Outs()
-	if err != nil {
-		drv.Close()
-		return nil, err
-	}
-
-	var in midi.In
-	var out midi.Out
-
-	for _, port := range ins {
-		log.Info().Msgf("found midi input device: %s", port.String())
-		if port.String() == cfg.Input {
-			in = port
-			break
-		}
-	}
-
-	for _, port := range outs {
-		log.Info().Msgf("found midi output device: %s", port.String())
-		if port.String() == cfg.Output {
-			out = port
-			break
-		}
-	}
-
-	if in == nil {
-		return nil, fmt.Errorf("input midi device %s not found", cfg.Input)
-	}
-
-	if out == nil {
-		return nil, fmt.Errorf("output midi device %s not found", cfg.Output)
-	}
-
-	if err := in.Open(); err != nil {
-		drv.Close()
-		return nil, err
-	}
+	log.Info().Msgf("found midi output device: %s", out.String())
 
 	if err := out.Open(); err != nil {
-		in.Close()
-		drv.Close()
-		return nil, err
+		return nil, fmt.Errorf("opening midi out: %v", err)
 	}
 
-	wr := writer.New(out)
-
-	return &MidiClient{drv, in, out, wr, &cfg}, nil
+	return &MidiClient{in, out, &cfg}, nil
 }
 
 func (m *MidiClient) Close() {
-	m.in.Close()
-	m.out.Close()
-	m.drv.Close()
+	midi.CloseDriver()
 	log.Info().Msg("midi closed")
 }
 
-func (m *MidiClient) Listen(ch chan MidiMessage) error {
-	rd := reader.New(
-		reader.NoLogger(),
-		reader.IgnoreMIDIClock(),
-		reader.Each(func(pos *reader.Position, msg midi.Message) {
-			switch msg := msg.(type) {
-			case channel.NoteOn:
-				if msg.Channel() == m.cfg.Channel {
-					ch <- MidiNoteOn{
-						msg.Key(),
-						float32(msg.Velocity()) / float32(m.cfg.MaxInputValue),
-					}
-				}
-
-			case channel.NoteOff:
-				if msg.Channel() == m.cfg.Channel {
-					ch <- MidiNoteOff{msg.Key()}
-				}
-
-			case channel.ControlChange:
-				if msg.Channel() == m.cfg.Channel {
-					ch <- MidiControlChange{
-						msg.Controller(),
-						float32(msg.Value()) / float32(m.cfg.MaxInputValue),
-					}
+func (m *MidiClient) Listen(out chan MidiMessage) (func(), error) {
+	return midi.ListenTo(m.in, func(msg midi.Message, timestampms int32) {
+		var ch, key, vel, con, val uint8
+		switch {
+		case msg.GetNoteOn(&ch, &key, &vel):
+			if ch == m.cfg.Channel {
+				out <- MidiNoteOn{
+					key,
+					float32(vel) / float32(m.cfg.MaxInputValue),
 				}
 			}
-		}),
-	)
 
-	return rd.ListenTo(m.in)
+		case msg.GetNoteOff(&ch, &key, &vel):
+			if ch == m.cfg.Channel {
+				out <- MidiNoteOff{key}
+			}
+
+		case msg.GetControlChange(&ch, &con, &val):
+			if ch == m.cfg.Channel {
+				out <- MidiControlChange{
+					con,
+					float32(val) / float32(m.cfg.MaxInputValue),
+				}
+			}
+		}
+	})
+}
+
+func (m *MidiClient) send(msg midi.Message) error {
+	err := m.out.Send(msg)
+	if err != nil {
+		log.Error().Err(err).Msg("send midi message")
+	}
+	return err
 }
 
 func (m *MidiClient) LedOn(key uint8) {
-	writer.NoteOn(m.wr, key, 127)
+	m.send(midi.NoteOn(m.cfg.Channel, key, 127))
 }
 
 func (m *MidiClient) LedOff(key uint8) {
-	// NOTE: without the NoteOn the LED doesn't go off most of the time..?
-	writer.NoteOn(m.wr, key, 127)
-	writer.NoteOff(m.wr, key)
+	m.send(midi.NoteOn(m.cfg.Channel, key, 0))
 }
 
 func (m *MidiClient) SetLed(key uint8, state bool) {
@@ -154,7 +108,3 @@ func (m *MidiClient) SetLed(key uint8, state bool) {
 		m.LedOff(key)
 	}
 }
-
-// TODO emulate Send all button:
-// Request Existing Configuration (0x66)
-// https://docs.google.com/document/d/1zeRPklp_Mo_XzJZUKu2i-p1VgfBoUWF0JKZ5CzX8aB0/edit#

@@ -11,8 +11,7 @@ require (
 	github.com/nats-io/nats.go v1.11.1-0.20210623165838-4b75fc59ae30
 	github.com/rs/zerolog v1.23.0
 	github.com/sqp/pulseaudio v0.0.0-20180916175200-29ac6bfa231c
-	gitlab.com/gomidi/midi v1.23.7
-	gitlab.com/gomidi/rtmididrv v0.14.0
+	gitlab.com/gomidi/midi/v2 v2.0.21
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 )
