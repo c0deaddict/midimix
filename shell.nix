@@ -1,5 +1,5 @@
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.mkShell {
-  buildInputs = with pkgs; [ gcc alsaLib rtmidi ];
+  buildInputs = with pkgs; [ gcc alsaLib ];
 }
