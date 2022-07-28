@@ -26,7 +26,7 @@ type PulseAudioClient struct {
 	cfg     config.PulseAudioConfig
 	targets []PulseAudioTarget
 	midi    *midiclient.MidiClient
-	updates <-chan pulseaudio.Event
+	updates <-chan pulseaudio.SubscriptionEvent
 }
 
 func Open(cfg config.PulseAudioConfig, midi *midiclient.MidiClient) (*PulseAudioClient, error) {
@@ -57,7 +57,7 @@ func Open(cfg config.PulseAudioConfig, midi *midiclient.MidiClient) (*PulseAudio
 		})
 	}
 
-	pa.Refresh()
+	pa.init()
 
 	return &pa, nil
 }
@@ -78,136 +78,186 @@ func (p *PulseAudioClient) Close() {
 
 func (p *PulseAudioClient) Listen() {
 	for event := range p.updates {
-		facility := event & pulseaudio.EventFacilityMask
-		if facility != pulseaudio.EventSink && facility != pulseaudio.EventSource && facility != pulseaudio.EventSinkInput &&
-			facility != pulseaudio.EventSourceOutput {
+		var targetType config.PulseAudioTargetType
+		switch event.Event & pulseaudio.EventFacilityMask {
+		case pulseaudio.EventSink:
+			targetType = config.Sink
+		case pulseaudio.EventSource:
+			targetType = config.Source
+		case pulseaudio.EventSinkInput:
+			targetType = config.PlaybackStream
+		case pulseaudio.EventSourceOutput:
+			targetType = config.RecordStream
+		default:
 			continue
 		}
 
-		eventType := event & pulseaudio.EventTypeMask
-		if eventType == pulseaudio.EventTypeChange {
-			log.Info().Msgf("change %d", facility)
-			// TODO: debounce a refresh to get mute status from external changes?
-		} else if eventType == pulseaudio.EventTypeNew || eventType == pulseaudio.EventTypeRemove {
-			// TODO: could debounce this?
-			log.Info().Msg("Pulseaudio state changed, refreshing")
-			p.Refresh()
+		// TODO: lock a mutex for concurrent targets access?
+		switch event.Event & pulseaudio.EventTypeMask {
+		case pulseaudio.EventTypeChange:
+			p.refreshByIndex(event.Index, targetType)
+		case pulseaudio.EventTypeRemove:
+			target := p.removeTargetByIndex(event.Index, targetType)
+			if target != nil {
+				p.updateLedsForTarget(target)
+			}
+		case pulseaudio.EventTypeNew:
+			obj := p.getInfo(event.Index, targetType)
+			if target := p.lookup(obj); target != nil {
+				log.Info().Msgf("new target: (%s) %s", target.cfg.Type, target.cfg.Name)
+				target.refresh(obj)
+				p.updateLedsForTarget(target)
+			}
 		}
 	}
 }
 
-func (p *PulseAudioClient) Refresh() {
-	for i, _ := range p.targets {
+func (p *PulseAudioClient) init() {
+	for i := range p.targets {
 		p.targets[i].ids = make([]targetId, 0)
 	}
 
-	p.refreshSinks()
-	p.refreshSources()
-	p.refreshPlaybackStreams()
-	p.refreshRecordStreams()
-	p.updateLeds()
-}
-
-func (p *PulseAudioClient) refreshSinks() {
 	sinks, err := p.client.Sinks()
 	if err != nil {
-		log.Error().Err(err).Msg("listing sinks failed")
-		return
-	}
-
-	for _, sink := range sinks {
-		desc := sink.Name
-		if value, ok := sink.PropList["device.description"]; ok {
-			desc = value
-		}
-
-		if target := p.findTarget(desc, config.Sink); target != nil {
-			target.ids = append(target.ids, targetId{sink.Index, sink.Name})
-			target.mute = sink.Muted
-			target.channels = len(sink.ChannelMap)
-			// target.volume = sink.Cvolume[0]
+		log.Error().Err(err).Msg("list sinks")
+	} else {
+		for _, sink := range sinks {
+			p.lookupAndRefresh(sink)
 		}
 	}
-}
 
-func (p *PulseAudioClient) refreshSources() {
 	sources, err := p.client.Sources()
 	if err != nil {
-		log.Error().Err(err).Msg("listing sources failed")
-		return
-	}
-
-	for _, source := range sources {
-		desc := source.Name
-		if value, ok := source.PropList["device.description"]; ok {
-			desc = value
-		}
-
-		if target := p.findTarget(desc, config.Source); target != nil {
-			target.ids = append(target.ids, targetId{source.Index, source.Name})
-			target.mute = source.Muted
-			target.channels = len(source.ChannelMap)
-			// target.volume = sink.Cvolume[0]
+		log.Error().Err(err).Msg("list sources")
+	} else {
+		for _, source := range sources {
+			p.lookupAndRefresh(source)
 		}
 	}
-}
 
-func (p *PulseAudioClient) refreshPlaybackStreams() {
 	sinkInputs, err := p.client.SinkInputs()
 	if err != nil {
-		log.Error().Err(err).Msg("listing playback streams failed")
-		return
-	}
-
-	for _, sinkInput := range sinkInputs {
-		desc := sinkInput.Name
-		if value, ok := sinkInput.PropList["application.name"]; ok {
-			desc = value
-		}
-
-		if target := p.findTarget(desc, config.PlaybackStream); target != nil {
-			target.ids = append(target.ids, targetId{sinkInput.Index, sinkInput.Name})
-			target.mute = sinkInput.Muted
-			target.channels = len(sinkInput.ChannelMap)
-			// target.volume = sink.Cvolume[0]
+		log.Error().Err(err).Msg("list sink inputs")
+	} else {
+		for _, sinkInput := range sinkInputs {
+			p.lookupAndRefresh(sinkInput)
 		}
 	}
-}
 
-func (p *PulseAudioClient) refreshRecordStreams() {
-	recordStreams, err := p.client.SourceOutputs()
+	sourceOutputs, err := p.client.SourceOutputs()
 	if err != nil {
-		log.Error().Err(err).Msg("listing record streams")
-		return
+		log.Error().Err(err).Msg("list source outputs")
+	} else {
+		for _, sourceOutput := range sourceOutputs {
+			p.lookupAndRefresh(sourceOutput)
+		}
 	}
 
-	for _, recordStream := range recordStreams {
-		desc := recordStream.Name
-		if value, ok := recordStream.PropList["application.name"]; ok {
-			desc = value
-		}
-
-		if target := p.findTarget(desc, config.RecordStream); target != nil {
-			target.ids = append(target.ids, targetId{recordStream.Index, recordStream.Name})
-			target.mute = recordStream.Muted
-			target.channels = len(recordStream.ChannelMap)
-			// target.volume = sink.Cvolume[0]
-		}
+	for i := range p.targets {
+		p.updateLedsForTarget(&p.targets[i])
 	}
 }
 
-func (p *PulseAudioClient) updateLeds() {
-	for _, target := range p.targets {
-		if target.cfg.Presence != nil {
-			p.midi.SetLed(*target.cfg.Presence, len(target.ids) != 0)
-		}
+func (p *PulseAudioClient) lookup(object interface{}) *PulseAudioTarget {
+	var desc string
+	var targetType config.PulseAudioTargetType
 
-		if target.cfg.Mute != nil {
-			if len(target.ids) == 0 {
-				p.midi.LedOff(*target.cfg.Mute)
-			} else {
-				p.midi.SetLed(*target.cfg.Mute, target.mute)
-			}
+	switch obj := object.(type) {
+	case pulseaudio.Sink:
+		targetType = config.Sink
+		desc = obj.Name
+		if value, ok := obj.PropList["device.description"]; ok {
+			desc = value
+		}
+	case pulseaudio.Source:
+		targetType = config.Source
+		desc = obj.Name
+		if value, ok := obj.PropList["device.description"]; ok {
+			desc = value
+		}
+	case pulseaudio.SinkInput:
+		targetType = config.PlaybackStream
+		desc = obj.Name
+		if value, ok := obj.PropList["application.name"]; ok {
+			desc = value
+		}
+	case pulseaudio.SourceOutput:
+		targetType = config.RecordStream
+		desc = obj.Name
+		if value, ok := obj.PropList["application.name"]; ok {
+			desc = value
+		}
+	}
+
+	return p.findTarget(desc, targetType)
+}
+
+func (p *PulseAudioClient) lookupAndRefresh(obj interface{}) {
+	if t := p.lookup(obj); t != nil {
+		t.refresh(obj)
+	}
+}
+
+func (p *PulseAudioClient) getInfo(index uint32, targetType config.PulseAudioTargetType) interface{} {
+	switch targetType {
+	case config.Sink:
+		sink, err := p.client.GetSinkInfo(index)
+		if err != nil {
+			log.Error().Err(err).Msg("refresh sink")
+			return nil
+		}
+		return *sink
+
+	case config.Source:
+		source, err := p.client.GetSourceInfo(index)
+		if err != nil {
+			log.Error().Err(err).Msg("refresh source")
+			return nil
+		}
+		return *source
+
+	case config.PlaybackStream:
+		sinkInput, err := p.client.GetSinkInputInfo(index)
+		if err != nil {
+			log.Error().Err(err).Msg("refresh sink input")
+			return nil
+		}
+		return *sinkInput
+	case config.RecordStream:
+		sourceOutput, err := p.client.GetSourceOutputInfo(index)
+		if err != nil {
+			log.Error().Err(err).Msg("refresh source output")
+			return nil
+		}
+		return *sourceOutput
+	default:
+		return nil
+	}
+}
+
+func (p *PulseAudioClient) refreshByIndex(index uint32, targetType config.PulseAudioTargetType) *PulseAudioTarget {
+	target := p.findTargetByIndex(index, targetType)
+	if target == nil {
+		return nil
+	}
+
+	obj := p.getInfo(index, targetType)
+	target.refresh(obj)
+
+	p.updateLedsForTarget(target)
+	return target
+}
+
+func (p *PulseAudioClient) updateLedsForTarget(target *PulseAudioTarget) {
+	if target.cfg.Presence != nil {
+		p.midi.SetLed(*target.cfg.Presence, len(target.ids) != 0)
+	}
+
+	if target.cfg.Mute != nil {
+		if len(target.ids) == 0 {
+			p.midi.LedOff(*target.cfg.Mute)
+		} else {
+			p.midi.SetLed(*target.cfg.Mute, target.mute)
 		}
 	}
 }
@@ -216,6 +266,40 @@ func (p *PulseAudioClient) findTarget(description string, targetType config.Puls
 	for i, target := range p.targets {
 		if target.cfg.Type == targetType && target.cfg.Name == description {
 			return &p.targets[i]
+		}
+	}
+
+	return nil
+}
+
+func (p *PulseAudioClient) findTargetByIndex(index uint32, targetType config.PulseAudioTargetType) *PulseAudioTarget {
+	for i, target := range p.targets {
+		if target.cfg.Type != targetType {
+			continue
+		}
+
+		for _, id := range target.ids {
+			if id.index == index {
+				return &p.targets[i]
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *PulseAudioClient) removeTargetByIndex(index uint32, targetType config.PulseAudioTargetType) *PulseAudioTarget {
+	for i, target := range p.targets {
+		if target.cfg.Type != targetType {
+			continue
+		}
+
+		t := &p.targets[i]
+		for j, id := range t.ids {
+			if id.index == index {
+				t.ids = append(t.ids[:j], t.ids[j+1:]...)
+				return t
+			}
 		}
 	}
 
@@ -321,3 +405,38 @@ func (p *PulseAudioClient) setMute(target *PulseAudioTarget, id targetId, mute b
 // 		}
 // 	}
 // }
+
+func (t *PulseAudioTarget) addId(index uint32, name string) {
+	for _, id := range t.ids {
+		if id.index == index {
+			return
+		}
+	}
+
+	t.ids = append(t.ids, targetId{index, name})
+}
+
+func (t *PulseAudioTarget) refresh(object interface{}) {
+	switch obj := object.(type) {
+	case pulseaudio.Sink:
+		t.addId(obj.Index, obj.Name)
+		t.mute = obj.Muted
+		t.channels = len(obj.ChannelMap)
+		// t.volume = obj.Cvolume[0]
+	case pulseaudio.Source:
+		t.addId(obj.Index, obj.Name)
+		t.mute = obj.Muted
+		t.channels = len(obj.ChannelMap)
+		// t.volume = obj.Cvolume[0]
+	case pulseaudio.SinkInput:
+		t.addId(obj.Index, obj.Name)
+		t.mute = obj.Muted
+		t.channels = len(obj.ChannelMap)
+		// t.volume = sinkInput.Cvolume[0]
+	case pulseaudio.SourceOutput:
+		t.addId(obj.Index, obj.Name)
+		t.mute = obj.Muted
+		t.channels = len(obj.ChannelMap)
+		// t.volume = sourceOutput.Cvolume[0]
+	}
+}

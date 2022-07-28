@@ -15,6 +15,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-replace github.com/lawl/pulseaudio => github.com/c0deaddict/pulseaudio v0.0.0-20211226174250-3b3e39eac5c0
+replace github.com/lawl/pulseaudio => github.com/c0deaddict/pulseaudio v0.0.0-20220728194319-dcd5883e0316
 
 // replace github.com/lawl/pulseaudio => ../pulseaudio
