@@ -9,7 +9,7 @@ buildGoModule rec {
   # go mod strips directories without packages. This strips parts of the gomidi
   # rtmidi cpp code.
   proxyVendor = true;
-  vendorSha256 = "sha256-Z3nSV2YN5zo3dszlw1MG5UPVNYoLvzy7crMR3QU82d0=";
+  vendorSha256 = "sha256-RVfx9+1KSfYYyeOX8V2O4zH9KWEiJ+V2GtGCQxE2A9c=";
 
   subPackages = [ "cmd/midimix" ];
 
