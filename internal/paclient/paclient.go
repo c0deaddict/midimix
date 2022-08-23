@@ -1,6 +1,8 @@
 package paclient
 
 import (
+	"time"
+
 	"github.com/lawl/pulseaudio"
 	"github.com/rs/zerolog/log"
 
@@ -57,7 +59,10 @@ func Open(cfg config.PulseAudioConfig, midi *midiclient.MidiClient) (*PulseAudio
 		})
 	}
 
-	pa.init()
+	// Refresh now and after 10 seconds. Midimix sometimes starts before the
+	// PulseAudio API sees devices.
+	pa.refreshAll()
+	time.AfterFunc(10*time.Second, pa.refreshAll)
 
 	return &pa, nil
 }
@@ -112,11 +117,7 @@ func (p *PulseAudioClient) Listen() {
 	}
 }
 
-func (p *PulseAudioClient) init() {
-	for i := range p.targets {
-		p.targets[i].ids = make([]targetId, 0)
-	}
-
+func (p *PulseAudioClient) refreshAll() {
 	sinks, err := p.client.Sinks()
 	if err != nil {
 		log.Error().Err(err).Msg("list sinks")
