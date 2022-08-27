@@ -1,5 +1,5 @@
-github.com/c0deaddict/pulseaudio v0.0.0-20220728194319-dcd5883e0316 h1:czsLPP0FKtfIWOML385xloiupmugIdCx7gY6KQK71YQ=
-github.com/c0deaddict/pulseaudio v0.0.0-20220728194319-dcd5883e0316/go.mod h1:9h36x4KH7r2V8DOCKoPMt87IXZ++X90y8D5nnuwq290=
+github.com/c0deaddict/pulseaudio v0.0.0-20220826212152-fdaa260adcbf h1:dAnLVxQw/cMXfL4q1klgRWYTjdqnJV2BJSwBa11R49s=
+github.com/c0deaddict/pulseaudio v0.0.0-20220826212152-fdaa260adcbf/go.mod h1:9h36x4KH7r2V8DOCKoPMt87IXZ++X90y8D5nnuwq290=
 github.com/coreos/go-systemd/v22 v22.3.2/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/godbus/dbus/v5 v5.0.4/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/golang/protobuf v1.4.0-rc.1/go.mod h1:ceaxUfeHdC40wWswd/P6IGgMaK3YpKi5j83Wpe3EHw8=

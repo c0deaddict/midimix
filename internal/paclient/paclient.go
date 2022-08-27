@@ -16,11 +16,12 @@ type targetId struct {
 }
 
 type PulseAudioTarget struct {
-	cfg      config.PulseAudioTarget
-	ids      []targetId
-	mute     bool
-	volume   float32
-	channels int
+	cfg       config.PulseAudioTarget
+	ids       []targetId
+	mute      bool
+	volume    float32
+	channels  int
+	isDefault bool
 }
 
 type PulseAudioClient struct {
@@ -75,6 +76,9 @@ func (p *PulseAudioClient) Close() {
 		}
 		if target.cfg.Presence != nil {
 			p.midi.LedOff(*target.cfg.Presence)
+		}
+		if target.cfg.Default != nil {
+			p.midi.LedOff(*target.cfg.Default)
 		}
 	}
 
@@ -151,6 +155,19 @@ func (p *PulseAudioClient) refreshAll() {
 	} else {
 		for _, sourceOutput := range sourceOutputs {
 			p.lookupAndRefresh(sourceOutput)
+		}
+	}
+
+	server, err := p.client.ServerInfo()
+	if err != nil {
+		log.Error().Err(err).Msg("get server info")
+	} else {
+		for i, target := range p.targets {
+			if target.cfg.Type == config.Sink {
+				p.targets[i].isDefault = target.matchName(server.DefaultSink)
+			} else if target.cfg.Type == config.Source {
+				p.targets[i].isDefault = target.matchName(server.DefaultSource)
+			}
 		}
 	}
 
@@ -250,6 +267,10 @@ func (p *PulseAudioClient) refreshByIndex(index uint32, targetType config.PulseA
 }
 
 func (p *PulseAudioClient) updateLedsForTarget(target *PulseAudioTarget) {
+	if target.cfg.Default != nil {
+		p.midi.SetLed(*target.cfg.Default, target.isDefault)
+	}
+
 	if target.cfg.Presence != nil {
 		p.midi.SetLed(*target.cfg.Presence, len(target.ids) != 0)
 	}
@@ -307,6 +328,38 @@ func (p *PulseAudioClient) removeTargetByIndex(index uint32, targetType config.P
 	return nil
 }
 
+func (p *PulseAudioClient) setDefault(target *PulseAudioTarget) {
+	for i, other := range p.targets {
+		if &other == target {
+			continue
+		}
+
+		if other.cfg.Type == target.cfg.Type && p.targets[i].isDefault {
+			p.targets[i].isDefault = false
+			if other.cfg.Default != nil {
+				p.midi.LedOff(*other.cfg.Default)
+			}
+		}
+	}
+
+	target.isDefault = true
+	if target.cfg.Default != nil {
+		p.midi.LedOn(*target.cfg.Default)
+	}
+
+	if target.cfg.Type == config.Sink {
+		err := p.client.SetDefaultSink(target.name())
+		if err != nil {
+			log.Error().Err(err).Msgf("set default sink")
+		}
+	} else if target.cfg.Type == config.Source {
+		err := p.client.SetDefaultSource(target.name())
+		if err != nil {
+			log.Error().Err(err).Msgf("set default source")
+		}
+	}
+}
+
 func (p *PulseAudioClient) OnMidiMessage(msg midiclient.MidiMessage) {
 	switch msg := msg.(type) {
 	case midiclient.MidiControlChange:
@@ -337,6 +390,10 @@ func (p *PulseAudioClient) OnMidiMessage(msg midiclient.MidiMessage) {
 						}
 					}
 				}
+			}
+
+			if target.cfg.Default != nil && *target.cfg.Default == msg.Key {
+				p.setDefault(&p.targets[i])
 			}
 		}
 	}
@@ -372,41 +429,6 @@ func (p *PulseAudioClient) setMute(target *PulseAudioTarget, id targetId, mute b
 	}
 }
 
-// func (p *PulseAudioClient) NewPlaybackStream(path dbus.ObjectPath) {
-// 	log.Info().Msgf("playback stream added: %v", path)
-//
-// 	targetType := config.PlaybackStream
-// 	obj := p.getObject(targetType, path)
-// 	if target := p.matchTarget(targetType, obj); target != nil {
-// 		log.Info().Msgf("setting mute=%v volume=%v on %v", target.mute, target.volume, path)
-// 		target.paths = append(target.paths, path)
-// 		p.setMute(obj, target.mute)
-// 		if err := p.setVolume(obj, target.volume); err != nil {
-// 			log.Warn().Err(err).Msgf("failed to set volume of %v", path)
-// 		}
-// 		if target.cfg.Presence != nil {
-// 			p.midi.LedOn(*target.cfg.Presence)
-// 		}
-// 	}
-// }
-//
-// func (p *PulseAudioClient) StreamVolumeUpdated(path dbus.ObjectPath, values []uint32) {
-// 	// Workaround for Firefox bug that sets the volume to 100% when pausing
-// 	// or seeking in an audio stream.
-// 	// https://bugzilla.mozilla.org/show_bug.cgi?id=1422637
-// 	if target, _ := p.findTargetByPath(path); target != nil {
-// 		if target.cfg.Type == config.PlaybackStream && target.cfg.Name == "Firefox" {
-// 			if values[0] == 65536 && target.volume < 1.0 {
-// 				log.Debug().Msgf("fixing firefox volume for %v", path)
-// 				obj := p.getObject(target.cfg.Type, path)
-// 				if obj != nil {
-// 					p.setVolume(obj, target.volume)
-// 				}
-// 			}
-// 		}
-// 	}
-// }
-
 func (t *PulseAudioTarget) addId(index uint32, name string) {
 	for _, id := range t.ids {
 		if id.index == index {
@@ -417,6 +439,23 @@ func (t *PulseAudioTarget) addId(index uint32, name string) {
 	t.ids = append(t.ids, targetId{index, name})
 }
 
+func (t *PulseAudioTarget) matchName(name string) bool {
+	for _, id := range t.ids {
+		if id.name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *PulseAudioTarget) name() string {
+	if len(t.ids) == 0 {
+		return ""
+	} else {
+		return t.ids[0].name
+	}
+}
+
 func (t *PulseAudioTarget) refresh(object interface{}) {
 	switch obj := object.(type) {
 	case pulseaudio.Sink:
@@ -425,10 +464,14 @@ func (t *PulseAudioTarget) refresh(object interface{}) {
 		t.channels = len(obj.ChannelMap)
 		// t.volume = obj.Cvolume[0]
 	case pulseaudio.Source:
-		t.addId(obj.Index, obj.Name)
-		t.mute = obj.Muted
-		t.channels = len(obj.ChannelMap)
-		// t.volume = obj.Cvolume[0]
+		if obj.MonitorSourceName == "" {
+			t.addId(obj.Index, obj.Name)
+			t.mute = obj.Muted
+			t.channels = len(obj.ChannelMap)
+			// t.volume = obj.Cvolume[0]
+		} else {
+			log.Info().Msgf("ignoring monitor for source %s", t.cfg.Name)
+		}
 	case pulseaudio.SinkInput:
 		t.addId(obj.Index, obj.Name)
 		t.mute = obj.Muted

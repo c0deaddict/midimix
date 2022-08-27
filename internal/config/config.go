@@ -32,6 +32,7 @@ type PulseAudioTarget struct {
 	Type     PulseAudioTargetType `yaml:"type"`
 	Name     string               `yaml:"name"`
 	Mute     *uint8               `yaml:"mute",omitempty`
+	Default  *uint8               `yaml:"default",omitempty`
 	Presence *uint8               `yaml:"presence",omitempty`
 	Volume   *uint8               `yaml:"volume",omitempty`
 }
