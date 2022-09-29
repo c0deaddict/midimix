@@ -1,4 +1,4 @@
-{ lib, buildGoModule, alsaLib }:
+{ lib, buildGoModule, alsa-lib }:
 
 buildGoModule rec {
   pname = "midimix";
@@ -13,7 +13,7 @@ buildGoModule rec {
 
   subPackages = [ "cmd/midimix" ];
 
-  buildInputs = [ alsaLib ]; # for rtmidi
+  buildInputs = [ alsa-lib ]; # for rtmidi
 
   meta = with lib; {
     description = "AKAI MIDIMix control";
