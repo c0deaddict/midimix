@@ -12,7 +12,7 @@ import (
 	"github.com/c0deaddict/midimix/internal/config"
 )
 
-func Connect(cfg config.NatsConfig) (*nats.Conn, error) {
+func Connect(clientName string, cfg config.NatsConfig) (*nats.Conn, error) {
 	var opts []nats.Option
 	if cfg.Username != "" {
 		password, err := readPassword(cfg.PasswordFile)
@@ -21,6 +21,9 @@ func Connect(cfg config.NatsConfig) (*nats.Conn, error) {
 		}
 		opts = append(opts, nats.UserInfo(cfg.Username, *password))
 	}
+
+	// Set the client name.
+	opts = append(opts, nats.Name(clientName))
 
 	// Try to reconnect every 2 seconds, forever.
 	opts = append(opts, nats.MaxReconnects(-1))

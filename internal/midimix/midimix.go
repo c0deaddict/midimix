@@ -36,7 +36,7 @@ func Open(cfg *config.Config) (*Midimix, error) {
 	m := &Midimix{}
 	var err error
 
-	m.Nats, err = natsclient.Connect(cfg.Nats)
+	m.Nats, err = natsclient.Connect("midimix", cfg.Nats)
 	if err != nil {
 		return nil, fmt.Errorf("nats: %v", err)
 	}
